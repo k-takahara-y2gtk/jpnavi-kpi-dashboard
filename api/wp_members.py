@@ -18,7 +18,7 @@ def fetch_wp_members_data() -> pd.DataFrame:
 
     all_users = []
     offset = 0
-    limit = 10000
+    limit = 5000
 
     while True:
         params = {"limit": limit, "offset": offset}
