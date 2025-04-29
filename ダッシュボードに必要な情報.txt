@@ -1,3 +1,81 @@
 営業・登録シート
 https://y2quare1201.sharepoint.com/:x:/s/Y2GTK/EeY8vcdP999JqYVabdYXmK8Bfjax3ICBrn4zMNGFteBBMw?e=BfjdgC
 
+また、WPのカスタムAPIも設定しているため、注意が必要です。
+
+// ここから社内ダッシュボード用API
+add_action('rest_api_init', function () {
+    register_rest_route('custom/v1', '/wp-members-status', array(
+        'methods'             => 'GET',
+        'callback'            => 'get_wp_members_status',
+        'permission_callback' => 'my_api_permission_check',
+    ));
+});
+
+// 認証関数（X-API-KEY による認証）
+function my_api_permission_check() {
+    $headers = getallheaders();
+    $expected_key = 'dfehq80qcny47cq9r47qcn0jmdejcqn';
+    return isset($headers['X-API-KEY']) && $headers['X-API-KEY'] === $expected_key;
+}
+
+// 実際にデータを返すAPI
+function get_wp_members_status() {
+    global $wpdb;
+
+    // --- 1. 権限（ロール）別ユーザー数 ---
+    $by_role = array();
+    $users = $wpdb->get_results("SELECT user_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = '{$wpdb->prefix}capabilities'");
+    foreach ($users as $user) {
+        $roles = maybe_unserialize($user->meta_value);
+        if (is_array($roles)) {
+            foreach ($roles as $role => $value) {
+                $by_role[$role] = isset($by_role[$role]) ? $by_role[$role] + 1 : 1;
+            }
+        }
+    }
+
+    // --- 2. groupID ごとのユーザー数 ---
+    $groups = $wpdb->get_col("SELECT DISTINCT meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'group'");
+    $by_group = array();
+    foreach ($groups as $group_id) {
+        $user_count = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->usermeta} WHERE meta_key = 'group' AND meta_value = %s",
+            $group_id
+        ));
+        $by_group[$group_id] = intval($user_count);
+    }
+
+    // --- 3. 各ユーザーの属性一覧（必要項目） ---
+    $user_ids = $wpdb->get_col("SELECT ID FROM {$wpdb->users} LIMIT 10000");
+    $user_data = array();
+
+    foreach ($user_ids as $uid) {
+        $user_info = get_userdata($uid);
+        $user_data[] = array(
+            'user_id' => $uid,
+            'name' => $user_info->first_name . ' ' . $user_info->last_name,
+            'email' => $user_info->user_email,
+            'group' => get_user_meta($uid, 'group', true),
+            'class' => get_user_meta($uid, 'group_id_alphabet', true),
+            'company' => get_user_meta($uid, 'company', true),
+            'position' => get_user_meta($uid, 'position', true),
+            'nationality' => get_user_meta($uid, 'user_nationality', true),
+            'level_now' => get_user_meta($uid, 'level', true),
+            'level_target' => get_user_meta($uid, 'level2', true),
+            'gender' => get_user_meta($uid, 'gender', true),
+            'birth' => get_user_meta($uid, 'birth', true),
+            'registered' => $user_info->user_registered,
+            'roles' => $user_info->roles,  // カスタムロール含む配列
+			'sll_lineid' => get_user_meta($uid, 'sll_lineid', true),
+        );
+    }
+
+    return array(
+        'total_users' => count($user_ids),
+        'by_role' => $by_role,
+        'by_group' => $by_group,
+        'user_detail_list' => $user_data
+    );
+}
+
