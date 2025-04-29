@@ -10,31 +10,35 @@ from dotenv import load_dotenv
 import os
 import pandas as pd
 
-# --- API 呼び出しと整形処理 ---
 def fetch_wp_members_data() -> pd.DataFrame:
-    # .env 読み込み
     load_dotenv()
-
-    API_URL = os.getenv("WP_API_URL") # .env必要です
-    API_KEY = os.getenv("WP_API_KEY") # .env必要です
-
+    API_URL = os.getenv("WP_API_URL")
+    API_KEY = os.getenv("WP_API_KEY")
     headers = {"X-API-KEY": API_KEY}
-    response = requests.get(API_URL, headers=headers)
 
-    if response.status_code != 200:
-        raise RuntimeError(f"API取得に失敗しました（status: {response.status_code}）\n{response.text}")
+    all_users = []
+    offset = 0
+    limit = 10000
 
-    data = response.json()
+    while True:
+        params = {"limit": limit, "offset": offset}
+        response = requests.get(API_URL, headers=headers, params=params)
+        if response.status_code != 200:
+            raise RuntimeError(f"API取得に失敗しました（status: {response.status_code}）\n{response.text}")
 
-    # --- ユーザー詳細データをDataFrameに変換 ---
-    users = data.get("user_detail_list", [])
-    df_users = pd.DataFrame(users)
+        data = response.json()
+        users = data.get("user_detail_list", [])
+        if not users:
+            break  # データが無くなったら終了
 
-    # --- 権限とグループを個別列で持たせる（roles[0] 展開） ---
+        all_users.extend(users)
+        offset += limit  # 次のオフセットへ進む
+
+    df_users = pd.DataFrame(all_users)
+
     if "roles" in df_users.columns:
         df_users["role"] = df_users["roles"].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else None)
 
-    # 必要なら他の整形処理もここで追加
     return df_users
 
 
