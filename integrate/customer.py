@@ -39,13 +39,28 @@ def get_member_metrics() -> dict:
     """
     # --- WordPress のメンバー情報取得 ---
     df_wp = fetch_wp_members_data()
+    # カラム名を確認
+    print("利用可能なカラム:", list(df_wp.columns))
+    
     wp_total = len(df_wp)
-    # 詳細情報入力済み：name, email, group がすべて非NaNの場合
-    wp_detail_count = df_wp.dropna(subset=["name", "email", "group"]).shape[0]
+    
+    # 詳細情報入力済み：カラムの存在を確認してから処理
+    detail_columns = ["display_name", "user_email", "group"] 
+    # 存在するカラムだけをsubsetに指定
+    available_detail_columns = [col for col in detail_columns if col in df_wp.columns]
+    
+    if available_detail_columns:
+        wp_detail_count = df_wp.dropna(subset=available_detail_columns).shape[0]
+    else:
+        wp_detail_count = 0
+        print("警告: 詳細情報のカラムが見つかりません")
+    
     # LINE連携済み：sll_lineid が存在するユーザー数
     wp_line_linked = df_wp["sll_lineid"].notna().sum() if "sll_lineid" in df_wp.columns else 0
+    
     # グループ別登録人数：group 列でカウント
     group_counts = df_wp.groupby("group").size().to_dict() if "group" in df_wp.columns else {}
+    
     # role 別登録人数：role 列でカウント
     role_counts = df_wp.groupby("role").size().to_dict() if "role" in df_wp.columns else {}
 
